@@ -1,4 +1,4 @@
-import { cardIdentitySchema } from './index';
+import { cards, validateContent } from './index';
 
-cardIdentitySchema.parse({ id: 'scaffold', name: 'Coddle' });
-console.log('Content validation passed.');
+validateContent();
+console.log(`Content validation passed: ${cards.length} cards.`);

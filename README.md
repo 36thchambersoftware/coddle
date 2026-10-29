@@ -25,6 +25,18 @@ npm run build
 Use `vim docs/DECISIONS.md` to record rule clarifications.
 Use `npm run format` to format source and documentation.
 
+## Play solo in the terminal
+
+```sh
+npm run play:cli -- --seed 42
+npm run play:cli -- --auto --seed 42 --days 7 --difficulty normal
+```
+
+Choose the Baby, then select numbered actions. Targeted Care answers matching
+Hazards. Nap Time resolves Night; discard choices appear when required.
+See the recorded [Standard playthrough](docs/PLAYTHROUGH.md) and
+[engine contract](docs/ENGINE.md).
+
 ## Workspaces
 
 | Path             | Purpose                               |
@@ -41,8 +53,8 @@ Rules: [game design](docs/GAME_DESIGN.md). Clarifications:
 
 ## Milestones
 
-- M0: workspace scaffold, strict TypeScript, formatting, lint, test, CI.
-- M1: solo engine and interactive terminal play.
+- M0 complete: workspace scaffold, strict TypeScript, formatting, lint, test, CI.
+- M1 complete: deterministic solo engine and interactive terminal play.
 - M2: solo browser experience.
 - M3: complete content, bots and measured balance.
 - M4: local multiplayer.
