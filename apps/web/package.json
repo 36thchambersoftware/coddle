@@ -1,0 +1,19 @@
+{
+  "name": "@coddle/web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@coddle/content": "0.1.0",
+    "@coddle/engine": "0.1.0",
+    "@coddle/bots": "0.1.0",
+    "framer-motion": "^12.23.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "zustand": "^5.0.8"
+  }
+}
