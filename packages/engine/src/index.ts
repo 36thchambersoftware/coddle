@@ -24,15 +24,15 @@ function changes(before: Json, after: Json, path = ''): GameEvent[] {
     !Array.isArray(before) &&
     !Array.isArray(after)
   ) {
-    return [
-      ...new Set([...Object.keys(before), ...Object.keys(after)]),
-    ].flatMap((key) =>
-      changes(
-        before[key] ?? null,
-        after[key] ?? null,
-        path ? `${path}.${key}` : key,
-      ),
-    );
+    return [...new Set([...Object.keys(before), ...Object.keys(after)])]
+      .sort()
+      .flatMap((key) =>
+        changes(
+          before[key] ?? null,
+          after[key] ?? null,
+          path ? `${path}.${key}` : key,
+        ),
+      );
   }
   return [{ type: 'change', field: path, before, after }];
 }

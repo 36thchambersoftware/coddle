@@ -55,7 +55,7 @@ Rules: [game design](docs/GAME_DESIGN.md). Clarifications:
 
 - M0 complete: workspace scaffold, strict TypeScript, formatting, lint, test, CI.
 - M1 complete: deterministic solo engine and interactive terminal play.
-- M2: solo browser experience.
+- M2 complete: mobile-first Solo browser game with settings, save/resume and Baby Journal.
 - M3: complete content, bots and measured balance.
 - M4: local multiplayer.
 - M5: parent modes.
