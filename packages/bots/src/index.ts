@@ -1,12 +1,13 @@
 import { getCard, type Card } from '@coddle/content';
 import {
+  applyAction,
   getLegalActions,
   type Action,
   type GameState,
   type Player,
 } from '@coddle/engine';
 
-export type BotLevel = 'easy' | 'normal';
+export type BotLevel = 'easy' | 'normal' | 'hard';
 function randomPick(state: GameState, player: Player): number {
   let t =
     (state.seed ^
@@ -95,6 +96,151 @@ function actionValue(p: Player, a: Action): number {
     benefit -= 1;
   return benefit / Math.max(1, card.cost ?? 0) - 0.1;
 }
+function rolloutDamage(state: GameState, p: Player, cardId: string): number {
+  const card = getCard(cardId);
+  let amount =
+    damage(card) +
+    Number(state.config.winCondition.days === state.day + 1) +
+    Number(state.config.difficulty === 'terrible' && state.day + 1 >= 5) +
+    Math.floor(state.day / 3) +
+    state.hazardReshuffles;
+  const tags = card.tags;
+  if (p.cute <= 3 && tags.includes('Gross')) amount--;
+  if (p.babyId === 'triplets') amount--;
+  if (p.modifiers.includes('iron-tummy') && tags.includes('Gross')) amount--;
+  if (p.modifiers.includes('sensitive-skin') && tags.includes('Diaper'))
+    amount++;
+  return Math.max(0, amount);
+}
+function simulateNight(
+  state: GameState,
+  player: Player,
+  seed: number,
+  rollout: number,
+): number {
+  const p = structuredClone(player);
+  let shield = p.shield;
+  let hp = p.hp;
+  const hit = (n: number) => {
+    const absorbed = Math.min(shield, n);
+    shield -= absorbed;
+    hp = Math.max(0, hp - n + absorbed);
+  };
+  for (const hazard of p.trouble) {
+    const data = getCard(hazard.cardId).hazard!;
+    if (data.linger || hazard.timer <= 1)
+      hit(rolloutDamage(state, p, hazard.cardId));
+  }
+  if (p.statuses.includes('Feverish')) hit(1);
+  const hungerDecay = p.parents.includes('gamer-dad')
+    ? 2
+    : p.babyId === 'chunky-monkey'
+      ? 2
+      : 1;
+  const hunger = Math.max(0, p.hunger - hungerDecay);
+  if (hunger === 0) hit(2);
+  const coddle = Math.max(0, p.coddle - 1);
+  if (coddle >= 4) hp = Math.min(p.maxHp, hp + 1);
+  if (hp <= 0) return -100 + hp;
+  const nextDay = state.day + 1;
+  let count = nextDay === 1 ? 1 : nextDay >= 6 ? 3 : 2;
+  if (state.config.difficulty === 'easy' && nextDay <= 3) count--;
+  if (
+    (state.config.difficulty === 'hard' ||
+      state.config.difficulty === 'terrible') &&
+    nextDay >= 3
+  )
+    count++;
+  count = Math.max(0, count);
+  const weighted = getHazardPool(nextDay);
+  let random = (seed ^ Math.imul(rollout + 1, 0x9e3779b9) ^ state.day) >>> 0;
+  for (let i = 0; i < count; i++) {
+    random =
+      (Math.imul(random ^ (random >>> 16), 0x45d9f3b) + 0x6d2b79f5) >>> 0;
+    const cardId =
+      weighted[Math.floor((random / 4294967296) * weighted.length)]!;
+    const card = getCard(cardId);
+    const data = card.hazard!;
+    const hitsNextNight = data.linger || data.timer <= 1;
+    if (data.timer === 0 || hitsNextNight) hit(rolloutDamage(state, p, cardId));
+    if (
+      card.effects.some((e) =>
+        e.ops.some((op) => op.op === 'addStatus' && op.status === 'Feverish'),
+      )
+    )
+      hit(1);
+    if (hp <= 0) return -100 + hp;
+  }
+  return hp * 2 + hunger * 1.5 + coddle * 0.7 + p.stamina * 0.3;
+}
+const allHazards = getCard;
+let hazardPool: string[] | null = null;
+function getHazardPool(day: number): string[] {
+  if (!hazardPool) {
+    hazardPool = [];
+    for (const id of [
+      'dirty-diaper',
+      'diarrhea',
+      'vomit',
+      'gas',
+      'rash',
+      'colic',
+      'teething',
+      'ear-infection',
+      'fever',
+      'runny-nose',
+      'couch',
+      'outlet',
+      'lego',
+      'pet-chaos',
+      'sticky-hands',
+      'night-terrors',
+      'thunderstorm',
+      'sunburn',
+      'parents-fighting',
+      'dropped-pacifier',
+      'skipped-nap',
+      'hungry-cry',
+      'tsunami',
+      'visitor',
+    ])
+      hazardPool.push(id, id);
+  }
+  return hazardPool.filter((id) => (allHazards(id).minDay ?? 1) <= day);
+}
+function hardAction(
+  state: GameState,
+  playerId: string,
+  actions: Action[],
+): Action {
+  const player = state.players.find((p) => p.id === playerId)!;
+  if (state.phase !== 'action')
+    return actions.reduce((best, action) =>
+      actionValue(player, action) > actionValue(player, best) ? action : best,
+    );
+  let best = actions[0]!;
+  let bestValue = -Infinity;
+  for (const action of actions) {
+    const immediate = actionValue(player, action);
+    let after = state;
+    if (action.type !== 'endTurn') after = applyAction(state, action).state;
+    const p = after.players.find((candidate) => candidate.id === playerId)!;
+    let expected = 0;
+    for (let rollout = 0; rollout < 30; rollout++)
+      expected += simulateNight(
+        after,
+        p,
+        state.seed ^ (state.rng + actions.indexOf(action)),
+        rollout,
+      );
+    const value = immediate + expected / 30;
+    if (value > bestValue) {
+      best = action;
+      bestValue = value;
+    }
+  }
+  return best;
+}
 export function chooseAction(
   state: GameState,
   playerId: string,
@@ -118,6 +264,7 @@ export function chooseAction(
       });
     return weighted[Math.floor(r * weighted.length)] ?? legal[0]!;
   }
+  if (level === 'hard') return hardAction(state, playerId, legal);
   return legal.reduce((best, action) =>
     actionValue(p, action) > actionValue(p, best) ? action : best,
   );

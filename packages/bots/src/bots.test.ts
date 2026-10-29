@@ -34,3 +34,24 @@ test('Normal decisions meet the 50 ms budget without reading hidden deck order',
   other.rng = 99;
   expect(chooseAction(s, 'p1')).toEqual(chooseAction(other, 'p1'));
 });
+test('Hard bot runs deterministic 30-draw lookahead without mutating hidden deck state', () => {
+  let state = createGame(SOLO_STANDARD, 71);
+  const choice = chooseAction(state, 'p1', 'hard');
+  expect(choice).toEqual(chooseAction(state, 'p1', 'hard'));
+  state = applyAction(state, choice).state;
+  const snapshot = structuredClone(state);
+  const action = chooseAction(state, 'p1', 'hard');
+  expect(action).toEqual(chooseAction(state, 'p1', 'hard'));
+  expect(state).toEqual(snapshot);
+  expect(getLegalActions(state, 'p1')).toContainEqual(action);
+  expect(() =>
+    chooseAction(
+      {
+        ...state,
+        decks: { ...state.decks, hazard: { draw: [], discard: [] } },
+      },
+      'p1',
+      'hard',
+    ),
+  ).not.toThrow();
+});

@@ -51,13 +51,29 @@ Rules: [game design](docs/GAME_DESIGN.md). Clarifications:
 [decisions](docs/DECISIONS.md). Contributor rules:
 [Copilot instructions](.github/copilot-instructions.md).
 
+## Balance simulation
+
+```sh
+npm run sim -- --mode solo --days 7 --bot normal --games 10000
+npm run sim -- --mode solo --days 7 --bot normal --games 2500 --difficulty all
+npm run sim -- --mode solo --days 7 --bot hard --games 1000 --csv /tmp/coddle.csv
+```
+
+Simulation is seeded and outputs win rates by Baby/Parent/Difficulty, average
+HP by Day, and an optional CSV. Results and known limitations live in
+[balance notes](docs/BALANCE.md).
+
 ## Milestones
 
 - M0 complete: workspace scaffold, strict TypeScript, formatting, lint, test, CI.
 - M1 complete: deterministic solo engine and interactive terminal play.
 - M2 complete: mobile-first Solo browser game with settings, save/resume and Baby Journal.
-- M3: complete content, bots and measured balance.
+- M3 complete: all starter content, Easy/Normal/Hard bots and simulator; initial balance targets missed, documented in `docs/BALANCE.md`.
 - M4: local multiplayer.
 - M5: parent modes.
 - M6: offline and mobile packaging preparation.
 - M7: optional online play, not enabled by default.
+
+Try M3 with `npm run sim -- --mode solo --days 7 --bot normal --games 1000`.
+The 10,000-game Normal baseline and recommended follow-up experiments are in
+`docs/BALANCE.md`.
