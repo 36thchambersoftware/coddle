@@ -1,0 +1,11 @@
+{
+  "name": "@coddle/bots",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "dependencies": {
+    "@coddle/engine": "0.1.0",
+    "@coddle/content": "0.1.0"
+  }
+}
