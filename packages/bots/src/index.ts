@@ -6,6 +6,7 @@ import {
   type GameState,
   type Player,
 } from '@coddle/engine';
+import { multiplayerActionValue } from './multiplayer-value';
 
 export type BotLevel = 'easy' | 'normal' | 'hard';
 function randomPick(state: GameState, player: Player): number {
@@ -24,7 +25,7 @@ function damage(card: Card): number {
     .flatMap((e) => e.ops)
     .reduce((sum, op) => sum + (op.op === 'damage' ? op.n : 0), 0);
 }
-function actionValue(p: Player, a: Action): number {
+function actionValue(state: GameState, p: Player, a: Action): number {
   if (a.type === 'chooseBaby') {
     const stats = getCard(a.cardId).stats!;
     return (stats.startHp ?? 0) + (stats.staminaCap ?? 3) * 2;
@@ -36,8 +37,12 @@ function actionValue(p: Player, a: Action): number {
       .flatMap((e) => e.ops)
       .reduce((n, op) => n + ('n' in op ? Math.max(0, op.n) : 1), 0);
   }
+  const multiplayerValue = multiplayerActionValue(state, p, a);
+  if (multiplayerValue !== undefined) return multiplayerValue;
   const h =
-    'targetUid' in a ? p.trouble.find((h) => h.uid === a.targetUid) : undefined;
+    'targetUid' in a
+      ? p.trouble.find((hazard) => hazard.uid === a.targetUid)
+      : undefined;
   let prevented = h
     ? damage(getCard(h.cardId)) + (getCard(h.cardId).hazard?.linger ? 3 : 0)
     : 0;
@@ -216,12 +221,14 @@ function hardAction(
   const player = state.players.find((p) => p.id === playerId)!;
   if (state.phase !== 'action')
     return actions.reduce((best, action) =>
-      actionValue(player, action) > actionValue(player, best) ? action : best,
+      actionValue(state, player, action) > actionValue(state, player, best)
+        ? action
+        : best,
     );
   let best = actions[0]!;
   let bestValue = -Infinity;
   for (const action of actions) {
-    const immediate = actionValue(player, action);
+    const immediate = actionValue(state, player, action);
     let after = state;
     if (action.type !== 'endTurn') after = applyAction(state, action).state;
     const p = after.players.find((candidate) => candidate.id === playerId)!;
@@ -266,6 +273,6 @@ export function chooseAction(
   }
   if (level === 'hard') return hardAction(state, playerId, legal);
   return legal.reduce((best, action) =>
-    actionValue(p, action) > actionValue(p, best) ? action : best,
+    actionValue(state, p, action) > actionValue(state, p, best) ? action : best,
   );
 }

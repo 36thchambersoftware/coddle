@@ -12,7 +12,7 @@ No clock, DOM, IO, or global randomness is used by the engine.
 | Field                    | Meaning                                                                 |
 | ------------------------ | ----------------------------------------------------------------------- |
 | version                  | Save schema version; currently 1                                        |
-| config                   | Validated independent copy of mode/difficulty/survival duration         |
+| config                   | Validated mode, difficulty, duration, and optional bot seat ids         |
 | seed / rng               | Initial seed and current mulberry32 uint32 accumulator                  |
 | nextId                   | Monotonic instance identifier counter                                   |
 | day                      | Current Day, starting 1                                                 |
@@ -87,8 +87,23 @@ elimination, revival and result. `change` events supply complete top-level
 JSON before/after patches (player/deck arrays atomically), covering bookkeeping
 as well as visible state. UI animations consume semantic events, not patches.
 
-## Current supported scope
+## Multiplayer
 
-Solo Baby Survival (Easy/Normal/Hard/Terrible, finite 1-365 Days or Endless).
-Unsupported multiplayer/parent configs explicitly fail, rather than pretending
-to implement another mode. Sibling cards are validated but excluded from solo.
+Baby mode supports 2-4 seats in versus or co-op. Players choose distinct Baby
+cards in seating order; each has a private hand and Trouble Zone, while the
+Care, Hazard, and Day Event decks are shared. The Day Event is applied to every
+living board once on the first Wake of Day 2+. `actedThisDay` tracks each living
+seat independently; the starting seat rotates after the full round.
+
+Versus supports Last Baby Standing and Survival Race. Passing retains the
+Hazard's timer and marks it `hot`; simultaneous Night elimination compares the
+Health snapshots captured immediately before each player's Night. Race winners
+are ordered by remaining Health, Milestones, then seat order. Co-op supports
+Share, Lullaby Aura, once-per-Day Ghost Helper Shields, and team medal outcomes.
+`config.botPlayers` names seats controlled by the UI bot runner; bots still use
+the public engine actions and their own hand.
+
+Supported scope: Baby Solo Survival, Last Baby Standing, Survival Race, and
+Co-op Nursery (Easy/Normal/Hard/Terrible, finite 1-365 Days or Endless).
+Parent perspective modes remain unsupported and reject invalid configuration.
+Sibling cards are included only in versus Care decks.

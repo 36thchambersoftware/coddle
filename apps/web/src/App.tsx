@@ -1,8 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { MotionConfig, motion, useReducedMotion } from 'framer-motion';
 import { en, getCard } from '@coddle/content';
-import { SOLO_STANDARD, type Difficulty } from '@coddle/engine';
+import { chooseAction } from '@coddle/bots';
+import {
+  SOLO_STANDARD,
+  type Difficulty,
+  type GameConfig,
+} from '@coddle/engine';
 import { Board } from './Board';
 import { CardView } from './CardView';
 import { Portrait } from './Portrait';
@@ -17,6 +22,10 @@ const browserStorage: StoragePort = {
 };
 const store = createGameStore(browserStorage);
 type Page = 'game' | 'settings' | 'rules' | 'journal' | 'new';
+type Mode = 'solo' | 'lastStanding' | 'race' | 'coop';
+function isMode(value: string): value is Mode {
+  return ['solo', 'lastStanding', 'race', 'coop'].includes(value);
+}
 export function App() {
   const {
     game,
@@ -35,17 +44,58 @@ export function App() {
   const [seed, setSeed] = useState('42');
   const [days, setDays] = useState('7');
   const [difficulty, setDifficulty] = useState<Difficulty>('normal');
+  const [mode, setMode] = useState<Mode>('solo');
+  const [playerCount, setPlayerCount] = useState('2');
+  const [fillWithBots, setFillWithBots] = useState(false);
+  const [readyPlayerId, setReadyPlayerId] = useState<string | null>(null);
   const [formError, setFormError] = useState('');
   const dialog = useRef<HTMLDialogElement>(null);
   const handledEvents = useRef(events);
   const prefersReduced = useReducedMotion();
-  const p = game?.players[0];
+  const p = game?.players.find((player) => player.id === game.activePlayerId);
+  const botTurn =
+    !!game && game.config.botPlayers.includes(game.activePlayerId);
+  const requiresPrivacy =
+    !!game &&
+    game.players.length > 1 &&
+    !botTurn &&
+    readyPlayerId !== game.activePlayerId;
+  useLayoutEffect(() => {
+    setReadyPlayerId(null);
+  }, [game?.activePlayerId]);
   useEffect(() => {
     if (handledEvents.current !== events) {
       feedback(events, settings);
       handledEvents.current = events;
     }
   }, [events, settings]);
+  useEffect(() => {
+    if (!game || !game.config.botPlayers.includes(game.activePlayerId)) return;
+    const timer = window.setTimeout(() => {
+      let current = store.getState().game;
+      let steps = 0;
+      const botLevel =
+        current?.config.difficulty === 'easy'
+          ? 'easy'
+          : current?.config.difficulty === 'normal'
+            ? 'normal'
+            : 'hard';
+      while (
+        current &&
+        current.phase !== 'finished' &&
+        current.config.botPlayers.includes(current.activePlayerId) &&
+        steps < 100
+      ) {
+        const previous = current;
+        const action = chooseAction(current, current.activePlayerId, botLevel);
+        store.getState().dispatch(action);
+        current = store.getState().game;
+        if (current === previous) break;
+        steps++;
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [game]);
   useEffect(() => {
     if (inspect) dialog.current?.showModal();
     else dialog.current?.close();
@@ -56,20 +106,37 @@ export function App() {
       setFormError(en.invalidSeed);
       return;
     }
-    start(
-      {
-        ...SOLO_STANDARD,
-        difficulty,
-        winCondition: {
-          type: 'surviveDays',
-          days: days === 'endless' ? null : Number(days),
-        },
-      },
-      n,
-    );
+    const players: GameConfig['players'] =
+      mode === 'solo'
+        ? 1
+        : playerCount === '2'
+          ? 2
+          : playerCount === '3'
+            ? 3
+            : 4;
+    const config: GameConfig = {
+      ...SOLO_STANDARD,
+      players,
+      interaction:
+        mode === 'solo' ? 'none' : mode === 'coop' ? 'coop' : 'versus',
+      botPlayers:
+        fillWithBots && players > 1
+          ? Array.from({ length: players - 1 }, (_, i) => `p${i + 2}`)
+          : [],
+      difficulty,
+      winCondition:
+        mode === 'lastStanding'
+          ? { type: 'lastStanding', days: null }
+          : {
+              type: 'surviveDays',
+              days: days === 'endless' ? null : Number(days),
+            },
+    };
+    start(config, n);
     setPage('game');
     setFormError('');
     setMeet(false);
+    setReadyPlayerId(null);
   }
   const latest = events
     .filter((e) => !['change', 'stat', 'draw'].includes(e.type))
@@ -86,7 +153,11 @@ export function App() {
         <header className="app-header">
           <button className="brand" onClick={() => setPage('game')}>
             {en.title}
-            <small>{en.solo}</small>
+            <small>
+              {game?.players.length && game.players.length > 1
+                ? en.multiplayer
+                : en.solo}
+            </small>
           </button>
           <nav aria-label={en.settings}>
             <button onClick={() => setPage('rules')}>{en.rules}</button>
@@ -123,6 +194,45 @@ export function App() {
                 onChange={(e) => setSeed(e.target.value)}
               />
             </label>
+            <label>
+              {en.mode}
+              <select
+                value={mode}
+                onChange={(e) => {
+                  if (isMode(e.target.value)) setMode(e.target.value);
+                }}
+              >
+                <option value="solo">{en.solo}</option>
+                <option value="lastStanding">{en.lastStanding}</option>
+                <option value="race">{en.survivalRace}</option>
+                <option value="coop">{en.coopNursery}</option>
+              </select>
+            </label>
+            {mode !== 'solo' && (
+              <>
+                <label>
+                  {en.players}
+                  <select
+                    value={playerCount}
+                    onChange={(e) => setPlayerCount(e.target.value)}
+                  >
+                    {[2, 3, 4].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="toggle">
+                  {en.fillWithBots}
+                  <input
+                    type="checkbox"
+                    checked={fillWithBots}
+                    onChange={(e) => setFillWithBots(e.target.checked)}
+                  />
+                </label>
+              </>
+            )}
             <label>
               {en.days}
               <select value={days} onChange={(e) => setDays(e.target.value)}>
@@ -208,7 +318,26 @@ export function App() {
                 ? ` / ${game.config.winCondition.days}`
                 : ` · ${en.endless}`}
             </motion.div>
-            {game.phase === 'chooseBaby' && (
+            {botTurn && game.phase !== 'finished' && (
+              <section className="panel privacy" role="status">
+                <h1>{en.botThinking}</h1>
+              </section>
+            )}
+            {requiresPrivacy && (
+              <section className="panel privacy">
+                <h1>
+                  {en.player} {game.activePlayerId.slice(1)}
+                </h1>
+                <p>{en.privacy}</p>
+                <button
+                  className="primary"
+                  onClick={() => setReadyPlayerId(game.activePlayerId)}
+                >
+                  {en.ready}
+                </button>
+              </section>
+            )}
+            {!botTurn && !requiresPrivacy && game.phase === 'chooseBaby' && (
               <section className="panel">
                 <h1>{en.chooseBaby}</h1>
                 <div className="baby-choices">
@@ -219,10 +348,10 @@ export function App() {
                       onClick={() => {
                         dispatch({
                           type: 'chooseBaby',
-                          playerId: 'p1',
+                          playerId: game.activePlayerId,
                           cardId: id,
                         });
-                        setMeet(true);
+                        if (game.players.length === 1) setMeet(true);
                       }}
                     >
                       <CardView card={getCard(id)} />
@@ -237,7 +366,7 @@ export function App() {
                 </div>
               </section>
             )}
-            {meet && p?.babyId && (
+            {!botTurn && !requiresPrivacy && meet && p?.babyId && (
               <section className="panel meet">
                 <Portrait variant={settings.portrait} />
                 <h1>{en.meetBaby}</h1>
@@ -257,28 +386,56 @@ export function App() {
                 </button>
               </section>
             )}
-            {!meet && p?.babyId && game.phase !== 'finished' && (
-              <Board
-                game={game}
-                settings={settings}
-                dispatch={dispatch}
-                inspect={setInspect}
-              />
-            )}
+            {!botTurn &&
+              !requiresPrivacy &&
+              !meet &&
+              p?.babyId &&
+              game.phase !== 'finished' && (
+                <Board
+                  game={game}
+                  settings={settings}
+                  dispatch={dispatch}
+                  inspect={setInspect}
+                />
+              )}
             {game.phase === 'finished' && !meet && p && (
               <section className="panel result">
                 <Portrait
                   variant={settings.portrait}
                   floating={game.result?.outcome === 'loss'}
                 />
-                <h1>{game.result?.outcome === 'win' ? en.win : en.byeBye}</h1>
+                <h1>
+                  {game.result?.outcome === 'loss'
+                    ? en.byeBye
+                    : game.result?.outcome === 'silver'
+                      ? en.silverResult
+                      : game.result?.outcome === 'bronze'
+                        ? en.bronzeResult
+                        : game.config.interaction === 'coop'
+                          ? en.coOpResult
+                          : game.config.winCondition.type === 'lastStanding'
+                            ? en.playerWins
+                            : en.win}
+                </h1>
+                {game.result?.winners.length ? (
+                  <p>
+                    {en.players}:{' '}
+                    {game.result.winners
+                      .map((id) => `${en.player} ${id.slice(1)}`)
+                      .join(', ')}
+                  </p>
+                ) : null}
                 <p>
                   {en.survived}: {game.result?.daysSurvived} · {en.score}:{' '}
                   {game.result?.score}
                 </p>
                 <p>
                   {en.milestone}:{' '}
-                  {p.milestones
+                  {(
+                    game.players.find((player) =>
+                      game.result?.winners.includes(player.id),
+                    ) ?? p
+                  ).milestones
                     .map(
                       (id) => en.milestones[id as keyof typeof en.milestones],
                     )

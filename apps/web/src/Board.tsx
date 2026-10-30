@@ -51,7 +51,7 @@ function Stats({ player }: { player: Player }) {
   );
 }
 export function Board({ game, dispatch, settings, inspect }: Props) {
-  const p = game.players[0]!;
+  const p = game.players.find((player) => player.id === game.activePlayerId)!;
   const [selected, setSelected] = useState<string | null>(null);
   const [ability, setAbility] = useState<
     'bundle' | 'cry' | 'nanny' | 'swap' | null
@@ -60,6 +60,12 @@ export function Board({ game, dispatch, settings, inspect }: Props) {
   const selectedCard = p.hand.find((c) => c.uid === selected);
   const plays = actions.filter(
     (a) => a.type === 'play' && a.cardUid === selected,
+  );
+  const shares = actions.filter(
+    (a) => a.type === 'share' && a.cardUid === selected,
+  );
+  const playerTargets = plays.filter(
+    (a) => a.type === 'play' && a.targetPlayerId,
   );
   const targets = ability ? actions.filter((a) => a.type === ability) : plays;
   function act(a: Action) {
@@ -76,7 +82,11 @@ export function Board({ game, dispatch, settings, inspect }: Props) {
       return;
     }
     const untargeted = actions.find(
-      (a) => a.type === 'play' && a.cardUid === uid && !a.targetUid,
+      (a) =>
+        a.type === 'play' &&
+        a.cardUid === uid &&
+        !a.targetUid &&
+        !a.targetPlayerId,
     );
     if (selected === uid && untargeted) act(untargeted);
     else {
@@ -112,6 +122,25 @@ export function Board({ game, dispatch, settings, inspect }: Props) {
           </p>
         )}
       </motion.section>
+      {game.players.length > 1 && (
+        <section className="seat-strip" aria-label={en.players}>
+          {game.players.map((player) => (
+            <div
+              key={player.id}
+              className={`seat ${player.id === p.id ? 'active-seat' : ''} ${!player.alive ? 'eliminated-seat' : ''}`}
+            >
+              <strong>
+                {en.player} {player.id.slice(1)}
+              </strong>
+              <span>
+                {player.alive
+                  ? `${en.hp} ${player.hp}/${player.maxHp} · ${en.trouble} ${player.trouble.length}`
+                  : en.byeBye}
+              </span>
+            </div>
+          ))}
+        </section>
+      )}
       <div className="trait-strip" aria-label={en.parents}>
         {[...p.parents, ...p.modifiers].map((id) => (
           <button key={id} onClick={() => inspect(id)}>
@@ -139,36 +168,68 @@ export function Board({ game, dispatch, settings, inspect }: Props) {
                 const valid = targets.some(
                   (a) => 'targetUid' in a && a.targetUid === h.uid,
                 );
+                const passes = actions.filter(
+                  (action) =>
+                    action.type === 'pass' && action.hazardUid === h.uid,
+                );
                 return (
-                  <motion.button
-                    key={h.uid}
-                    layout
-                    initial={{ scale: 0.6, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0.2, opacity: 0, rotate: 12 }}
-                    className={`hazard card ${valid ? 'valid-target' : ''}`}
-                    onClick={() => target(h.uid)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      drop(h.uid, e.dataTransfer.getData('text/plain'));
-                    }}
-                    aria-label={`${card.name}, ${en.timer} ${h.timer}${valid ? `, ${en.selectTarget}` : ''}`}
-                  >
-                    <span className="timer">
-                      {en.icons.timer}
-                      {card.hazard?.linger ? '∞' : h.timer}
-                    </span>
-                    <CardView card={card} compact />
-                    {h.answeredTags.length > 0 && (
-                      <span>{h.answeredTags.join(' + ')}</span>
+                  <div className="hazard-seat" key={h.uid}>
+                    <motion.button
+                      layout
+                      initial={{ scale: 0.6, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      exit={{ scale: 0.2, opacity: 0, rotate: 12 }}
+                      className={`hazard card ${valid ? 'valid-target' : ''}`}
+                      onClick={() => target(h.uid)}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        drop(h.uid, e.dataTransfer.getData('text/plain'));
+                      }}
+                      aria-label={`${card.name}, ${en.timer} ${h.timer}${valid ? `, ${en.selectTarget}` : ''}`}
+                    >
+                      <span className="timer">
+                        {en.icons.timer}
+                        {card.hazard?.linger ? '∞' : h.timer}
+                      </span>
+                      <CardView card={card} compact />
+                      {h.answeredTags.length > 0 && (
+                        <span>{h.answeredTags.join(' + ')}</span>
+                      )}
+                    </motion.button>
+                    {passes.map((action) =>
+                      action.type === 'pass' ? (
+                        <button
+                          key={action.targetPlayerId}
+                          className="pass-action"
+                          onClick={() => act(action)}
+                        >
+                          {en.passTo} {action.targetPlayerId.slice(1)}
+                        </button>
+                      ) : null,
                     )}
-                  </motion.button>
+                  </div>
                 );
               })}
           </AnimatePresence>
           {!p.trouble.length && <p className="quiet">{en.noTrouble}</p>}
         </div>
+        {actions.some((action) => action.type === 'ghost') && (
+          <section className="interaction-actions">
+            <h3>{en.ghost}</h3>
+            {actions.map((action) =>
+              action.type === 'ghost' ? (
+                <button
+                  key={`${action.helperId}-${action.targetPlayerId}`}
+                  onClick={() => act(action)}
+                >
+                  {en.player} {action.helperId.slice(1)} → {en.player}{' '}
+                  {action.targetPlayerId.slice(1)}
+                </button>
+              ) : null,
+            )}
+          </section>
+        )}
       </section>
       <div className="abilities">
         {(['bundle', 'cry', 'nanny', 'swap'] as const).map((key) => {
@@ -224,20 +285,49 @@ export function Board({ game, dispatch, settings, inspect }: Props) {
         {selectedCard && (
           <div className="preview panel">
             <CardView card={getCard(selectedCard.cardId)} />
-            {plays.length ? <p>{en.selectTarget}</p> : <p>{en.cannotPlay}</p>}
+            <p>
+              {playerTargets.length
+                ? en.chooseRival
+                : shares.length
+                  ? en.sharePrompt
+                  : plays.length
+                    ? en.selectTarget
+                    : en.cannotPlay}
+            </p>
             {plays
-              .filter((a) => a.type === 'play' && !a.targetUid)
+              .filter(
+                (a) => a.type === 'play' && !a.targetUid && !a.targetPlayerId,
+              )
               .map((a) => (
                 <button key={a.type} className="primary" onClick={() => act(a)}>
                   {en.confirmPlay}
                 </button>
               ))}
+            {plays.map((a) =>
+              a.type === 'play' && a.targetPlayerId ? (
+                <button key={a.targetPlayerId} onClick={() => act(a)}>
+                  {en.player} {a.targetPlayerId.slice(1)}
+                </button>
+              ) : null,
+            )}
+            {shares.map((a) =>
+              a.type === 'share' ? (
+                <button
+                  key={`share-${a.targetPlayerId}`}
+                  onClick={() => act(a)}
+                >
+                  {en.shareTo} {en.player} {a.targetPlayerId.slice(1)}
+                </button>
+              ) : null,
+            )}
           </div>
         )}
       </section>
       <footer className="turn-footer">
         <span>
-          {en.icons.sleep} {en.day} {game.day}
+          {game.players.length > 1
+            ? `${en.player} ${p.id.slice(1)} · ${en.day} ${game.day}`
+            : `${en.icons.sleep} ${en.day} ${game.day}`}
         </span>
         <button
           className="primary nap"

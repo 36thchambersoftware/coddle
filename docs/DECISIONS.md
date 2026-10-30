@@ -58,3 +58,29 @@
   the specification says "+ difficulty multiplier" without giving values.
 - "Chaos" is not one of the specified nine Day Events, so no additional Chaos
   event is invented. Optional Parent draft is deferred with multiplayer setup.
+
+## M4 local multiplayer
+
+- Multiplayer Baby setup is sequential in seat order; Baby cards are dealt
+  without replacement, and every seat gets its own Parents, Modifiers, and hand.
+  Care, Hazard, and Day Event draw/discard piles are shared.
+- Each living player gets one Wake, Hazard Roll, Action Phase, and Night per Day.
+  The shared Day Event flips on the first living Wake on Day 2+, and applies to
+  every living player's board at that point. The starting seat rotates after
+  each complete round.
+- Last Baby Standing waits for all living seats to finish the round before
+  awarding the sole survivor. A tie from simultaneous Night eliminations uses
+  each player's Health immediately before their own Night resolution, then
+  seating order for equal Health.
+- Survival Race lists every survivor as a winner, ordered by remaining Health,
+  Milestones, and seating order. This makes the scorecard ranking deterministic.
+- Versus modes add one Hazard per seat on Day 13 and each later Day. Day Events
+  return to their shared discard pile when the next Day begins.
+- `botPlayers` is a validated list of seat ids stored in `GameConfig`; the
+  browser runner uses the existing pure bot API. The engine does not privilege
+  bot seats or expose other players' hands to bot decisions.
+- Hot-seat screens obscure the board and hand until the next human player
+  explicitly confirms readiness. Bots act automatically between those screens.
+- Co-op medal thresholds use the configured total seats, including eliminated
+  players. A Ghost Helper may give one Shield per Day, and Share transfers one
+  Care instance without changing the shared deck.

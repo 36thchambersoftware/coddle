@@ -89,8 +89,12 @@ function runOp(ctx: Context, op: Op, scale: number): void {
       break;
     case 'addStatus':
       if (op.status !== 'first') {
-        addStatus(ctx, op.status);
-        refreshStats(ctx);
+        const target = ctx.targetPlayerId
+          ? ctx.state.players.find((player) => player.id === ctx.targetPlayerId)
+          : undefined;
+        const targetCtx = target ? { ...ctx, player: target } : ctx;
+        addStatus(targetCtx, op.status);
+        refreshStats(targetCtx);
       }
       break;
     case 'removeStatus': {
@@ -166,8 +170,32 @@ function runOp(ctx: Context, op: Op, scale: number): void {
     case 'rule':
       break;
     case 'auraCoddle':
-      break; // Solo has no Aura recipients.
-    case 'steal':
+      if (
+        ctx.state.config.interaction === 'coop' &&
+        rule(ctx, 'disableAura') <= 0
+      ) {
+        for (const player of ctx.state.players.filter((other) => other.alive))
+          setStat({ ...ctx, player }, 'coddle', player.coddle + n);
+      }
+      break;
+    case 'steal': {
+      if (ctx.source?.tags.includes('Sibling') && ctx.targetPlayerId) {
+        const target = ctx.state.players.find(
+          (player) => player.id === ctx.targetPlayerId,
+        );
+        if (!target?.hand.length) throw new Error('Target hand is empty');
+        const index = Math.floor(random(ctx.state) * target.hand.length);
+        const [stolen] = target.hand.splice(index, 1);
+        p.hand.push(stolen!);
+        ctx.events.push({
+          type: 'draw',
+          playerId: p.id,
+          cardId: stolen!.cardId,
+        });
+        break;
+      }
+      throw new Error('Steal requires a versus target');
+    }
     case 'passHazard':
     case 'swapHazard':
       throw new Error(

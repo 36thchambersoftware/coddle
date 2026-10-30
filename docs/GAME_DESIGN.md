@@ -204,6 +204,11 @@ is retained and the Hazard becomes Hot, preventing further passes. Include
 Sibling cards. After Day 12 everyone draws +1 Hazard. If all go out the same
 Night, highest HP at the start of that Night wins.
 
+Local multiplayer supports pass-and-play with a privacy screen before each human
+turn, or bots in the remaining seats. Each seat chooses a distinct Baby and has
+its own board and hand; Care, Hazard, and Day Event decks are shared. Survival
+Race ranks survivors by remaining HP, Milestones, then seating order.
+
 Co-op: Share costs 1 Stamina once/turn, giving a Care card to another baby.
 Lullaby Aura benefits all. All survivors = Gold; at least half = Silver;
 at least one = Bronze; none = Loss. Eliminated babies become Ghost Helpers,

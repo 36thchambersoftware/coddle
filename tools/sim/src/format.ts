@@ -19,7 +19,18 @@ export function describeAction(state: GameState, action: Action): string {
         : null;
       return `${en.play} ${card.name}${target ? ` ${en.cli.to} ${getCard(target.cardId).name}` : ''}`;
     }
-    default: {
+    case 'pass': {
+      const hazard = p.trouble.find((h) => h.uid === action.hazardUid);
+      return `${en.pass}: ${hazard ? getCard(hazard.cardId).name : ''}`;
+    }
+    case 'share':
+      return `${en.share}: ${getCard(p.hand.find((c) => c.uid === action.cardUid)!.cardId).name}`;
+    case 'ghost':
+      return en.ghost;
+    case 'bundle':
+    case 'cry':
+    case 'nanny':
+    case 'swap': {
       const h = p.trouble.find((h) => h.uid === action.targetUid)!;
       return `${en[action.type]}: ${getCard(h.cardId).name}`;
     }

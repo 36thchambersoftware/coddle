@@ -194,6 +194,32 @@ nav button {
   flex: 1;
   min-width: 190px;
 }
+.seat-strip,
+.interaction-actions {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-bottom: 10px;
+}
+.seat {
+  flex: 1 0 125px;
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border: 1px solid #b6a5b4;
+  border-radius: 12px;
+  background: var(--mint);
+  font-size: 0.72rem;
+}
+.active-seat {
+  outline: 3px solid #245e8b;
+}
+.eliminated-seat {
+  opacity: 0.6;
+}
+.seat span {
+  overflow-wrap: anywhere;
+}
 .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -249,6 +275,36 @@ meter {
   overflow-x: auto;
   padding: 9px 3px 15px;
   scroll-snap-type: x proximity;
+}
+.hazard-seat {
+  flex: 0 0 142px;
+  width: 142px;
+  display: flex;
+  flex-direction: column;
+}
+.hazard-seat .card {
+  width: 100%;
+}
+.pass-action {
+  width: 100%;
+  margin-top: 6px;
+  font-size: 0.75rem;
+}
+.interaction-actions {
+  flex-wrap: wrap;
+}
+.interaction-actions h3 {
+  flex-basis: 100%;
+}
+.privacy {
+  max-width: 480px;
+  margin: 15vh auto;
+  text-align: center;
+  padding: 30px 20px;
+}
+.privacy .primary {
+  width: 100%;
+  margin-top: 12px;
 }
 .card {
   position: relative;
@@ -496,6 +552,10 @@ dialog .primary {
     font-size: 1rem;
   }
   .card {
+    flex-basis: 165px;
+    width: 165px;
+  }
+  .hazard-seat {
     flex-basis: 165px;
     width: 165px;
   }

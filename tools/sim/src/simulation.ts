@@ -65,7 +65,7 @@ function play(seed: number, options: SimulationOptions): RunResult {
     modifiers: [...p.modifiers],
     difficulty: options.difficulty,
     bot: options.bot,
-    outcome: result.outcome,
+    outcome: result.outcome === 'win' ? 'win' : 'loss',
     score: result.score,
     days: result.daysSurvived,
     finalHp: p.hp,

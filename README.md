@@ -69,10 +69,14 @@ HP by Day, and an optional CSV. Results and known limitations live in
 - M1 complete: deterministic solo engine and interactive terminal play.
 - M2 complete: mobile-first Solo browser game with settings, save/resume and Baby Journal.
 - M3 complete: all starter content, Easy/Normal/Hard bots and simulator; initial balance targets missed, documented in `docs/BALANCE.md`.
-- M4: local multiplayer.
+- M4 complete: Last Baby Standing, Survival Race and Co-op Nursery with 2-4 seats, hot-seat privacy screens, and bot-filled seats.
 - M5: parent modes.
 - M6: offline and mobile packaging preparation.
 - M7: optional online play, not enabled by default.
+
+Try M4 in the browser: start a Last Baby Standing, Survival Race, or Co-op Nursery
+game, choose 2-4 seats, and optionally fill all seats after Player 1 with bots.
+The phone handoff screen hides the next player's board until they confirm.
 
 Try M3 with `npm run sim -- --mode solo --days 7 --bot normal --games 1000`.
 The 10,000-game Normal baseline and recommended follow-up experiments are in

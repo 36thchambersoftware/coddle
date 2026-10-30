@@ -55,6 +55,8 @@ test('In-Laws doubles live parent stats then expires without cumulative growth',
   expect(ctx.player.maxHp).toBe(24);
   expect(ctx.player.stamina).toBe(5);
   ctx.state.day++;
+  ctx.state.dayEvent = null;
+  ctx.state.actedThisDay = [];
   wake(ctx);
   expect(ctx.player.maxHp).toBe(22);
   expect(ctx.player.staminaCap).toBe(4);
@@ -115,6 +117,16 @@ test('difficulty, final-Day and Day-based chaos modifiers are explicit', () => {
   expect(damageBonus(ctx)).toBe(4);
   ctx.state.config.winCondition.days = null;
   expect(hazardCount(ctx)).toBe(6);
+});
+test('versus adds one Hazard per seat after Day 12', () => {
+  const ctx = context();
+  ctx.state.config.players = 2;
+  ctx.state.config.interaction = 'versus';
+  ctx.state.config.winCondition.days = null;
+  ctx.state.day = 12;
+  expect(hazardCount(ctx)).toBe(6);
+  ctx.state.day = 13;
+  expect(hazardCount(ctx)).toBe(8);
 });
 test('instant hazards use Shield; forecast skips ineligible cards; outage disables Monitor', () => {
   const ctx = context();

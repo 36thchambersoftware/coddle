@@ -46,6 +46,14 @@ test('settings and all game phases round-trip storage without altering replay', 
   }
   expect(gameSchema.safeParse(state).success).toBe(true);
 });
+test('older local saves without bot seat metadata restore as human-only games', () => {
+  const state = createGame(SOLO_STANDARD, 1);
+  const { botPlayers, ...legacyConfig } = state.config;
+  expect(botPlayers).toEqual([]);
+  expect(
+    gameSchema.parse({ ...state, config: legacyConfig }).config.botPlayers,
+  ).toEqual([]);
+});
 test('invalid/corrupt saves and blocked storage are reported explicitly', () => {
   const storage = memory();
   storage.set('game', '{bad json');

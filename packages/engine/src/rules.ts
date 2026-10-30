@@ -121,7 +121,8 @@ export function hazardCount(ctx: Context): number {
     n++;
   if (config.winCondition.days === day) n++;
   if (config.winCondition.days === null) n += Math.floor((day - 1) / 3);
-  return Math.max(0, n + rule(ctx, 'hazardCount'));
+  const versusEscalation = config.interaction === 'versus' && day > 12 ? 1 : 0;
+  return Math.max(0, n + rule(ctx, 'hazardCount') + versusEscalation);
 }
 export function damageBonus(ctx: Context): number {
   const { config, day } = ctx.state;

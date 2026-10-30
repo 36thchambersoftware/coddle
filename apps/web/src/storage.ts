@@ -50,16 +50,30 @@ export const gameSchema: z.ZodType<GameState> = z
     version: z.literal(1),
     config: z
       .object({
-        players: z.literal(1),
-        interaction: z.literal('none'),
+        players: z.union([
+          z.literal(1),
+          z.literal(2),
+          z.literal(3),
+          z.literal(4),
+        ]),
+        interaction: z.enum(['none', 'versus', 'coop']),
         perspective: z.literal('baby'),
+        botPlayers: z
+          .array(z.string().regex(/^p[2-4]$/))
+          .max(3)
+          .default([]),
         difficulty: z.enum(['easy', 'normal', 'hard', 'terrible']),
-        winCondition: z
-          .object({
-            type: z.literal('surviveDays'),
-            days: z.number().int().min(1).max(365).nullable(),
-          })
-          .strict(),
+        winCondition: z.union([
+          z
+            .object({
+              type: z.literal('surviveDays'),
+              days: z.number().int().min(1).max(365).nullable(),
+            })
+            .strict(),
+          z
+            .object({ type: z.literal('lastStanding'), days: z.null() })
+            .strict(),
+        ]),
       })
       .strict(),
     seed: nonnegative.max(0xffffffff),
@@ -67,13 +81,21 @@ export const gameSchema: z.ZodType<GameState> = z
     nextId: z.number().int().positive(),
     day: z.number().int().positive(),
     phase: z.enum(['chooseBaby', 'action', 'discard', 'finished']),
-    activePlayerId: z.literal('p1'),
+    activePlayerId: z.string().regex(/^p[1-4]$/),
+    seatOrder: z
+      .array(z.string().regex(/^p[1-4]$/))
+      .min(1)
+      .max(4),
+    actedThisDay: z.array(z.string().regex(/^p[1-4]$/)),
+    nightStartHp: z.record(z.string(), nonnegative),
+    ghostUsed: z.record(z.string(), nonnegative),
     babyChoices: z.array(knownId).max(2),
+    availableBabies: z.array(knownId),
     players: z
       .array(
         z
           .object({
-            id: z.literal('p1'),
+            id: z.string().regex(/^p[1-4]$/),
             babyId: z.union([knownId, z.literal('')]),
             baseStats: z
               .object({
@@ -122,7 +144,8 @@ export const gameSchema: z.ZodType<GameState> = z
             'Invalid player bounds',
           ),
       )
-      .length(1),
+      .min(1)
+      .max(4),
     decks: z.object({ care: deck, hazard: deck, event: deck }).strict(),
     dayEvent: knownId.nullable(),
     pendingChaos: nonnegative,
@@ -131,9 +154,10 @@ export const gameSchema: z.ZodType<GameState> = z
     newestHazard: z.string().nullable(),
     result: z
       .object({
-        outcome: z.enum(['win', 'loss']),
+        outcome: z.enum(['win', 'loss', 'gold', 'silver', 'bronze']),
         score: nonnegative,
         daysSurvived: nonnegative,
+        winners: z.array(z.string()),
       })
       .strict()
       .nullable(),
@@ -142,30 +166,46 @@ export const gameSchema: z.ZodType<GameState> = z
   .superRefine((s, ctx) => {
     const issue = (message: string) =>
       ctx.addIssue({ code: 'custom', message });
-    const p = s.players[0]!;
+    if (s.players.length !== s.config.players) issue('Player count mismatch');
+    if (
+      new Set(s.config.botPlayers).size !== s.config.botPlayers.length ||
+      s.config.botPlayers.some((id) => Number(id.slice(1)) > s.config.players)
+    )
+      issue('Invalid bot seats');
+    if (
+      s.seatOrder.length !== s.config.players ||
+      new Set(s.seatOrder).size !== s.seatOrder.length
+    )
+      issue('Invalid seat order');
+    if (!s.players.some((player) => player.id === s.activePlayerId))
+      issue('Unknown active player');
     if ((s.phase === 'finished') !== Boolean(s.result))
       issue('Result/phase mismatch');
     if (
       s.phase !== 'chooseBaby' &&
-      (!p.babyId || cardTypes.get(p.babyId) !== 'baby')
+      s.players.some(
+        (player) => !player.babyId || cardTypes.get(player.babyId) !== 'baby',
+      )
     )
       issue('Missing Baby');
     if (s.phase === 'chooseBaby' && !s.babyChoices.length)
       issue('Missing Baby choices');
     if (s.babyChoices.some((id) => cardTypes.get(id) !== 'baby'))
       issue('Wrong Baby choice type');
-    if (
-      p.parents.some((id) => cardTypes.get(id) !== 'parent') ||
-      p.modifiers.some((id) => cardTypes.get(id) !== 'modifier')
-    )
-      issue('Wrong setup card type');
-    if (
-      p.hand.some((c) => cardTypes.get(c.cardId) !== 'care') ||
-      p.trouble.some((c) => cardTypes.get(c.cardId) !== 'hazard')
-    )
-      issue('Wrong board card type');
-    const uids = [...p.hand, ...p.trouble].map((c) => c.uid);
-    if (new Set(uids).size !== uids.length) issue('Duplicate instance id');
+    for (const player of s.players) {
+      if (
+        player.parents.some((id) => cardTypes.get(id) !== 'parent') ||
+        player.modifiers.some((id) => cardTypes.get(id) !== 'modifier')
+      )
+        issue('Wrong setup card type');
+      if (
+        player.hand.some((c) => cardTypes.get(c.cardId) !== 'care') ||
+        player.trouble.some((c) => cardTypes.get(c.cardId) !== 'hazard')
+      )
+        issue('Wrong board card type');
+      const uids = [...player.hand, ...player.trouble].map((c) => c.uid);
+      if (new Set(uids).size !== uids.length) issue('Duplicate instance id');
+    }
   });
 export const settingsSchema = z
   .object({
@@ -194,7 +234,7 @@ export const journalSchema = z
         .object({
           seed: nonnegative,
           babyId: knownId,
-          outcome: z.enum(['win', 'loss']),
+          outcome: z.enum(['win', 'loss', 'gold', 'silver', 'bronze']),
           score: nonnegative,
           days: nonnegative,
           difficulty: z.enum(['easy', 'normal', 'hard', 'terrible']),

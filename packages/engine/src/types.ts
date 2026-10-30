@@ -2,10 +2,13 @@ import type { Card, Status } from '@coddle/content';
 
 export type Difficulty = 'easy' | 'normal' | 'hard' | 'terrible';
 export type GameConfig = {
-  winCondition: { type: 'surviveDays'; days: number | null };
-  interaction: 'none';
+  winCondition:
+    | { type: 'surviveDays'; days: number | null }
+    | { type: 'lastStanding'; days: null };
+  interaction: 'none' | 'versus' | 'coop';
   perspective: 'baby';
-  players: 1;
+  players: 1 | 2 | 3 | 4;
+  botPlayers: string[];
   difficulty: Difficulty;
 };
 export const SOLO_STANDARD: GameConfig = {
@@ -13,6 +16,7 @@ export const SOLO_STANDARD: GameConfig = {
   interaction: 'none',
   perspective: 'baby',
   players: 1,
+  botPlayers: [],
   difficulty: 'normal',
 };
 export type HandCard = { uid: string; cardId: string };
@@ -61,7 +65,12 @@ export type GameState = {
   phase: 'chooseBaby' | 'action' | 'discard' | 'finished';
   players: Player[];
   activePlayerId: string;
+  seatOrder: string[];
+  actedThisDay: string[];
+  nightStartHp: Record<string, number>;
+  ghostUsed: Record<string, number>;
   babyChoices: string[];
+  availableBabies: string[];
   decks: { care: Deck; hazard: Deck; event: Deck };
   dayEvent: string | null;
   pendingChaos: number;
@@ -69,20 +78,45 @@ export type GameState = {
   forecast: string[];
   newestHazard: string | null;
   result: null | {
-    outcome: 'win' | 'loss';
+    outcome: 'win' | 'loss' | 'gold' | 'silver' | 'bronze';
     score: number;
     daysSurvived: number;
+    winners: string[];
   };
 };
 export type Action =
   | { type: 'chooseBaby'; playerId: string; cardId: string }
-  | { type: 'play'; playerId: string; cardUid: string; targetUid?: string }
+  | {
+      type: 'play';
+      playerId: string;
+      cardUid: string;
+      targetUid?: string;
+      targetPlayerId?: string;
+    }
   | {
       type: 'bundle' | 'cry' | 'nanny' | 'swap';
       playerId: string;
       targetUid: string;
     }
   | { type: 'discard'; playerId: string; cardUid: string }
+  | {
+      type: 'pass';
+      playerId: string;
+      hazardUid: string;
+      targetPlayerId: string;
+    }
+  | {
+      type: 'share';
+      playerId: string;
+      cardUid: string;
+      targetPlayerId: string;
+    }
+  | {
+      type: 'ghost';
+      playerId: string;
+      helperId: string;
+      targetPlayerId: string;
+    }
   | { type: 'endTurn'; playerId: string };
 export type Json =
   null | boolean | number | string | Json[] | { [key: string]: Json };
@@ -94,6 +128,9 @@ export type GameEvent = {
     | 'hazardArrived'
     | 'hazardResolved'
     | 'hazardAnswered'
+    | 'hazardPassed'
+    | 'cardShared'
+    | 'ghostShield'
     | 'cardPlayed'
     | 'day'
     | 'dayEvent'
@@ -117,5 +154,6 @@ export type Context = {
   events: GameEvent[];
   source?: Card;
   targetUid?: string;
+  targetPlayerId?: string;
   hazard?: Hazard;
 };

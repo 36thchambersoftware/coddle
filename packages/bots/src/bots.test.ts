@@ -7,6 +7,23 @@ import {
 } from '@coddle/engine';
 import { chooseAction } from './index';
 
+function multiplayer(interaction: 'versus' | 'coop') {
+  let state = createGame(
+    {
+      ...SOLO_STANDARD,
+      players: 2,
+      interaction,
+    },
+    400,
+  );
+  while (state.phase === 'chooseBaby')
+    state = applyAction(
+      state,
+      getLegalActions(state, state.activePlayerId)[0]!,
+    ).state;
+  return state;
+}
+
 test.each(['easy', 'normal'] as const)(
   '%s bot is deterministic, pure and legal',
   (level) => {
@@ -54,4 +71,49 @@ test('Hard bot runs deterministic 30-draw lookahead without mutating hidden deck
       'hard',
     ),
   ).not.toThrow();
+});
+test('Multiplayer bots evaluate pass, share, Sibling and Ghost Helper actions', () => {
+  const versus = multiplayer('versus');
+  const player = versus.players[0]!;
+  player.stamina = 4;
+  player.trouble.push({
+    uid: `h${versus.nextId++}`,
+    cardId: 'dirty-diaper',
+    timer: 1,
+    answeredTags: [],
+    extraTags: [],
+    hot: false,
+    drawDay: 1,
+  });
+  player.hand.push({ uid: `c${versus.nextId++}`, cardId: 'mimic-cry' });
+  expect(
+    getLegalActions(versus, player.id).some(
+      (action) => action.type === 'play' && action.targetPlayerId === 'p2',
+    ),
+  ).toBe(true);
+  expect(() => chooseAction(versus, player.id)).not.toThrow();
+  expect(() => chooseAction(versus, player.id, 'hard')).not.toThrow();
+
+  const coop = multiplayer('coop');
+  coop.players[0]!.alive = false;
+  coop.players[1]!.trouble.push({
+    uid: `h${coop.nextId++}`,
+    cardId: 'dirty-diaper',
+    timer: 1,
+    answeredTags: [],
+    extraTags: [],
+    hot: false,
+    drawDay: 1,
+  });
+  coop.activePlayerId = 'p2';
+  expect(() => chooseAction(coop, 'p2')).not.toThrow();
+  expect(
+    getLegalActions(coop, 'p2').some((action) => action.type === 'ghost'),
+  ).toBe(true);
+
+  const sharing = multiplayer('coop');
+  expect(
+    getLegalActions(sharing, 'p1').some((action) => action.type === 'share'),
+  ).toBe(true);
+  expect(() => chooseAction(sharing, 'p1')).not.toThrow();
 });

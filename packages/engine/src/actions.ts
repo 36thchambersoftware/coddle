@@ -9,7 +9,12 @@ import type { Action, Context, GameState, Player } from './types';
 
 export function getLegalActions(state: GameState, playerId: string): Action[] {
   const p = state.players.find((p) => p.id === playerId);
-  if (!p || playerId !== state.activePlayerId || state.phase === 'finished')
+  if (
+    !p ||
+    !p.alive ||
+    playerId !== state.activePlayerId ||
+    state.phase === 'finished'
+  )
     return [];
   if (state.phase === 'chooseBaby')
     return state.babyChoices.map((cardId) => ({
@@ -28,7 +33,25 @@ export function getLegalActions(state: GameState, playerId: string): Action[] {
     const chosen = card.effects.some((e) =>
       e.ops.some((op) => op.op === 'delayHazard' && op.target !== 'all'),
     );
-    if (!chosen) actions.push({ type: 'play', playerId, cardUid: c.uid });
+    const sibling = card.tags.includes('Sibling');
+    if (!chosen && !(sibling && state.config.interaction === 'versus'))
+      actions.push({ type: 'play', playerId, cardUid: c.uid });
+    if (sibling && state.config.interaction === 'versus')
+      for (const rival of state.players.filter(
+        (other) => other.alive && other.id !== p.id,
+      ))
+        if (
+          !card.effects.some((effect) =>
+            effect.ops.some((op) => op.op === 'steal'),
+          ) ||
+          rival.hand.length > 0
+        )
+          actions.push({
+            type: 'play',
+            playerId,
+            cardUid: c.uid,
+            targetPlayerId: rival.id,
+          });
     for (const h of p.trouble)
       if (chosen || canAnswer(card, getCard(h.cardId)))
         actions.push({
@@ -60,7 +83,50 @@ export function getLegalActions(state: GameState, playerId: string): Action[] {
       !p.used.includes('swap')
     )
       actions.push({ type: 'swap', ...target });
+    if (
+      state.config.interaction === 'versus' &&
+      getCard(h.cardId).hazard?.passable &&
+      !h.hot &&
+      p.stamina >= 1 &&
+      !p.used.includes('pass')
+    ) {
+      for (const rival of state.players.filter(
+        (other) => other.alive && other.id !== p.id,
+      ))
+        actions.push({
+          type: 'pass',
+          playerId: p.id,
+          hazardUid: h.uid,
+          targetPlayerId: rival.id,
+        });
+    }
   }
+  if (
+    state.config.interaction === 'coop' &&
+    p.stamina >= 1 &&
+    !p.used.includes('share')
+  )
+    for (const rival of state.players.filter(
+      (other) => other.alive && other.id !== p.id,
+    ))
+      for (const c of p.hand)
+        actions.push({
+          type: 'share',
+          playerId: p.id,
+          cardUid: c.uid,
+          targetPlayerId: rival.id,
+        });
+  if (state.config.interaction === 'coop')
+    for (const helper of state.players.filter(
+      (other) => !other.alive && state.ghostUsed[other.id] !== state.day,
+    ))
+      for (const target of state.players.filter((other) => other.alive))
+        actions.push({
+          type: 'ghost',
+          playerId: p.id,
+          helperId: helper.id,
+          targetPlayerId: target.id,
+        });
   return actions;
 }
 function play(ctx: Context, action: Extract<Action, { type: 'play' }>): void {
@@ -68,7 +134,12 @@ function play(ctx: Context, action: Extract<Action, { type: 'play' }>): void {
   const index = p.hand.findIndex((c) => c.uid === action.cardUid);
   const handCard = p.hand.splice(index, 1)[0]!;
   const card = getCard(handCard.cardId);
-  const care: Context = { ...ctx, source: card, targetUid: action.targetUid };
+  const care: Context = {
+    ...ctx,
+    source: card,
+    targetUid: action.targetUid,
+    targetPlayerId: action.targetPlayerId,
+  };
   setStat(care, 'stamina', p.stamina - careCost(ctx.state, p, card));
   const h = p.trouble.find((h) => h.uid === action.targetUid);
   if (h && canAnswer(card, getCard(h.cardId))) {
@@ -128,6 +199,59 @@ export function execute(ctx: Context, action: Action): void {
     case 'play':
       play(ctx, action);
       break;
+    case 'pass': {
+      const index = p.trouble.findIndex(
+        (hazard) => hazard.uid === action.hazardUid,
+      );
+      const target = ctx.state.players.find(
+        (other) => other.id === action.targetPlayerId,
+      );
+      const hazard = p.trouble.splice(index, 1)[0]!;
+      hazard.hot = true;
+      target!.trouble.push(hazard);
+      p.used.push('pass');
+      setStat(ctx, 'stamina', p.stamina - 1);
+      ctx.events.push({
+        type: 'hazardPassed',
+        playerId: p.id,
+        cardId: hazard.cardId,
+        after: target!.id,
+      });
+      break;
+    }
+    case 'share': {
+      const index = p.hand.findIndex((card) => card.uid === action.cardUid);
+      const target = ctx.state.players.find(
+        (other) => other.id === action.targetPlayerId,
+      );
+      const [card] = p.hand.splice(index, 1);
+      target!.hand.push(card!);
+      p.used.push('share');
+      setStat(ctx, 'stamina', p.stamina - 1);
+      ctx.events.push({
+        type: 'cardShared',
+        playerId: p.id,
+        cardId: card!.cardId,
+        after: target!.id,
+      });
+      break;
+    }
+    case 'ghost': {
+      const helper = ctx.state.players.find(
+        (other) => other.id === action.helperId,
+      );
+      const target = ctx.state.players.find(
+        (other) => other.id === action.targetPlayerId,
+      );
+      ctx.state.ghostUsed[helper!.id] = ctx.state.day;
+      setStat({ ...ctx, player: target! }, 'shield', target!.shield + 1);
+      ctx.events.push({
+        type: 'ghostShield',
+        playerId: target!.id,
+        sourceId: helper!.id,
+      });
+      break;
+    }
     case 'bundle':
       p.used.push('bundle');
       setStat(ctx, 'coddle', p.coddle - 2);

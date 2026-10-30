@@ -18,14 +18,34 @@ export function createGame(config: GameConfig, seed: number): GameState {
   if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff)
     throw new Error('Seed must be uint32');
   if (
-    config.players !== 1 ||
     config.perspective !== 'baby' ||
-    config.interaction !== 'none' ||
-    config.winCondition.type !== 'surviveDays' ||
+    ![1, 2, 3, 4].includes(config.players) ||
     !['easy', 'normal', 'hard', 'terrible'].includes(config.difficulty)
   )
-    throw new Error('Only Solo Survival is implemented');
+    throw new Error('Invalid game configuration');
   if (
+    !Array.isArray(config.botPlayers) ||
+    new Set(config.botPlayers).size !== config.botPlayers.length ||
+    config.botPlayers.some((id) => {
+      return (
+        typeof id !== 'string' ||
+        !/^p[2-4]$/.test(id) ||
+        Number(id.slice(1)) > config.players
+      );
+    })
+  )
+    throw new Error('Bot seats must be unique multiplayer seats');
+  if ((config.players === 1) !== (config.interaction === 'none'))
+    throw new Error('Solo uses none; multiplayer requires versus or coop');
+  if (
+    config.winCondition.type === 'lastStanding' &&
+    (config.winCondition.days !== null ||
+      config.interaction !== 'versus' ||
+      config.players < 2)
+  )
+    throw new Error('Last standing requires 2-4 versus players');
+  if (
+    config.winCondition.type === 'surviveDays' &&
     config.winCondition.days !== null &&
     (!Number.isInteger(config.winCondition.days) ||
       config.winCondition.days < 1 ||
@@ -40,9 +60,16 @@ export function createGame(config: GameConfig, seed: number): GameState {
     nextId: 1,
     day: 1,
     phase: 'chooseBaby',
-    players: [freshPlayer('p1')],
+    players: Array.from({ length: config.players }, (_, i) =>
+      freshPlayer(`p${i + 1}`),
+    ),
     activePlayerId: 'p1',
+    seatOrder: Array.from({ length: config.players }, (_, i) => `p${i + 1}`),
+    actedThisDay: [],
+    nightStartHp: {},
+    ghostUsed: {},
     babyChoices: [],
+    availableBabies: [],
     decks: {
       care: { draw: [], discard: [] },
       hazard: { draw: [], discard: [] },
@@ -55,10 +82,11 @@ export function createGame(config: GameConfig, seed: number): GameState {
     newestHazard: null,
     result: null,
   };
-  state.babyChoices = shuffle(
+  state.availableBabies = shuffle(
     state,
     babies.map((c) => c.id),
-  ).slice(
+  );
+  state.babyChoices = state.availableBabies.slice(
     0,
     config.difficulty === 'hard' || config.difficulty === 'terrible' ? 1 : 2,
   );
@@ -66,7 +94,11 @@ export function createGame(config: GameConfig, seed: number): GameState {
     list.flatMap((c) => Array<string>(c.copies ?? 1).fill(c.id));
   state.decks.care.draw = shuffle(
     state,
-    expand(careCards.filter((c) => !c.tags.includes('Sibling'))),
+    expand(
+      careCards.filter(
+        (c) => config.interaction === 'versus' || !c.tags.includes('Sibling'),
+      ),
+    ),
   );
   state.decks.hazard.draw = shuffle(state, expand(hazards));
   state.decks.event.draw = shuffle(state, expand(dayEvents));
@@ -119,7 +151,26 @@ export function chooseBaby(ctx: Context, id: string): void {
     ctx.state.config.difficulty === 'terrible'
   )
     p.hunger = Math.min(p.hunger, 2);
+  ctx.state.availableBabies = ctx.state.availableBabies.filter(
+    (babyId) => babyId !== id,
+  );
   ctx.state.babyChoices = [];
-  drawCare(ctx, 5);
-  wake(ctx, true);
+  const next = ctx.state.players.find((player) => !player.babyId);
+  if (next) {
+    ctx.state.activePlayerId = next.id;
+    ctx.state.babyChoices = shuffle(ctx.state, ctx.state.availableBabies).slice(
+      0,
+      ctx.state.config.difficulty === 'hard' ||
+        ctx.state.config.difficulty === 'terrible'
+        ? 1
+        : 2,
+    );
+    return;
+  }
+  for (const player of ctx.state.players) drawCare({ ...ctx, player }, 5);
+  ctx.state.activePlayerId = ctx.state.seatOrder[0]!;
+  ctx.state.nightStartHp = Object.fromEntries(
+    ctx.state.players.map((player) => [player.id, player.hp]),
+  );
+  wake({ ...ctx, player: ctx.state.players[0]! }, true);
 }

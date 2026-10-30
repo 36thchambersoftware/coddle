@@ -37,17 +37,23 @@ export function createGameStore(storage: StoragePort) {
   return createStore<Store>((set, get) => {
     function save(next: GameState, events: GameEvent[], reset = false): void {
       const current = get();
-      const p = next.players[0]!;
+      const winner =
+        next.players.find((player) =>
+          next.result?.winners.includes(player.id),
+        ) ?? next.players[0]!;
+      const players = next.players;
       const discovered = [
         ...new Set(
           [
             ...current.journal.discovered,
             ...next.babyChoices,
-            p.babyId,
-            ...p.parents,
-            ...p.modifiers,
-            ...p.hand.map((c) => c.cardId),
-            ...p.trouble.map((h) => h.cardId),
+            ...players.flatMap((p) => [
+              p.babyId,
+              ...p.parents,
+              ...p.modifiers,
+              ...p.hand.map((c) => c.cardId),
+              ...p.trouble.map((h) => h.cardId),
+            ]),
             ...events.flatMap((e) => (e.cardId ? [e.cardId] : [])),
             ...(next.dayEvent ? [next.dayEvent] : []),
           ].filter(Boolean),
@@ -59,7 +65,7 @@ export function createGameStore(storage: StoragePort) {
           ...runs,
           {
             seed: next.seed,
-            babyId: p.babyId,
+            babyId: winner.babyId,
             outcome: next.result.outcome,
             score: next.result.score,
             days: next.result.daysSurvived,
